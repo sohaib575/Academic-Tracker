@@ -1,0 +1,1221 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Academic Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<!-- Tailwind CDN + config must run before styles.css/script.js so utility classes are generated first -->
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    darkMode: 'class',
+    theme: {
+      extend: {
+        colors: {
+          ink: {
+            950: '#05080d',
+            925: '#080c13',
+            900: '#0b111a',
+            850: '#0e1520',
+            800: '#121a26',
+            750: '#161f2d',
+            700: '#1c2733',
+            600: '#293544',
+            500: '#3c4a5c',
+          },
+        },
+        fontFamily: {
+          sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+          mono: ['"JetBrains Mono"', 'ui-monospace', 'SFMono-Regular', 'monospace'],
+        },
+        boxShadow: {
+          glow: '0 0 0 1px rgba(34,211,238,0.15), 0 0 24px -4px rgba(34,211,238,0.25)',
+          glowsm: '0 0 0 1px rgba(34,211,238,0.12), 0 0 12px -4px rgba(34,211,238,0.3)',
+        },
+      },
+    },
+  };
+</script>
+
+<!-- Custom stylesheet -->
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body class="bg-ink-950 text-slate-200 font-sans antialiased min-h-screen">
+
+<div id="boot" class="fixed inset-0 z-[999] flex items-center justify-center bg-ink-950">
+  <div class="flex flex-col items-center gap-3">
+    <div class="h-8 w-8 rounded-full border-2 border-ink-700 border-t-cyan-400 animate-spin"></div>
+    <p class="text-xs text-slate-500 font-mono">loading tracker…</p>
+  </div>
+</div>
+
+<div id="app" class="hidden"></div>
+
+<!-- App logic -->
+<script src="script.js"></script>
+</body>
+</html>
+
+
+* { scrollbar-width: thin; scrollbar-color: #29354490 transparent; }
+  *::-webkit-scrollbar { width: 8px; height: 8px; }
+  *::-webkit-scrollbar-thumb { background: #29354490; border-radius: 8px; }
+  *::-webkit-scrollbar-track { background: transparent; }
+
+  html, body { background: #05080d; }
+  body { font-feature-settings: "tnum" 1, "ss01" 1; }
+
+  .font-mono-num { font-variant-numeric: tabular-nums; }
+
+  @keyframes fadein { from { opacity:0; transform: translateY(4px);} to { opacity:1; transform: translateY(0);} }
+  .anim-in { animation: fadein .22s ease-out; }
+
+  @keyframes pulse-dot { 0%,100% { opacity:1;} 50% { opacity:.35; } }
+  .pulse-dot { animation: pulse-dot 2s ease-in-out infinite; }
+
+  input[type="checkbox"].chk {
+    appearance: none; -webkit-appearance:none;
+    width: 18px; height: 18px; border-radius: 5px;
+    border: 1.5px solid #3c4a5c; background: #0e1520;
+    display: inline-grid; place-content:center; cursor:pointer; flex-shrink:0;
+    transition: all .15s ease;
+  }
+  input[type="checkbox"].chk:checked {
+    background: linear-gradient(135deg,#22d3ee,#3b82f6); border-color: transparent;
+  }
+  input[type="checkbox"].chk:checked::after {
+    content:''; width:5px; height:9px; border: solid #05080d; border-width: 0 2px 2px 0;
+    transform: rotate(45deg) translateY(-1px);
+  }
+
+  input[type="text"], input[type="datetime-local"], input[type="url"], input[type="search"], textarea, select {
+    color-scheme: dark;
+  }
+
+  ::placeholder { color: #4a5768; }
+
+  .card-hover { transition: border-color .15s ease, transform .15s ease; }
+  .card-hover:hover { border-color: rgba(34,211,238,0.35); }
+
+  .drag-over { outline: 1.5px dashed #22d3ee55; outline-offset: -6px; background: rgba(34,211,238,0.03); }
+  .dragging { opacity: .4; }
+
+  .bar-track { background: #0e1520; }
+
+  @media (max-width: 767px) {
+    .desktop-only { display: none !important; }
+  }
+  @media (min-width: 768px) {
+    .mobile-only { display: none !important; }
+  }
+
+
+
+const ICON = {
+  grid: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>`,
+  list: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11M9 12h11M9 18h11"/><path d="M4 6h.01M4 12h.01M4 18h.01"/></svg>`,
+  flask: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h6M10 3v6.2L4.7 18a2 2 0 0 0 1.7 3h11.2a2 2 0 0 0 1.7-3L14 9.2V3"/><path d="M7.5 14h9"/></svg>`,
+  bar: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>`,
+  gear: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9c.12.36.32.68.6.94.28.26.63.44 1 .51H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1.55Z"/></svg>`,
+  plus: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>`,
+  edit: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`,
+  trash: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6"/><path d="M10 11v6M14 11v6"/></svg>`,
+  x: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>`,
+  search: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>`,
+  link: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l2-2a5 5 0 0 0-7-7l-1.2 1.1"/><path d="M14 11a5 5 0 0 0-7.5-.5l-2 2a5 5 0 0 0 7 7l1.1-1.1"/></svg>`,
+  check: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>`,
+  clock: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>`,
+  alert: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.9 18a2 2 0 0 0 1.7 3h16.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg>`,
+  chevron: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>`,
+  menu: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>`,
+  book: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/></svg>`,
+  layers: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5M3 17l9 5 9-5"/></svg>`,
+  download: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0-4-4m4 4 4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>`,
+  upload: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V3m0 0 4 4m-4-4-4 4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>`,
+  dots: `<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>`,
+  info: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg>`,
+  note: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z"/><path d="M15 3v6h6"/></svg>`,
+};
+const icon = (name, cls='w-4 h-4') => `<span class="${cls} inline-flex shrink-0">${ICON[name]||''}</span>`;
+
+/* ============================= CONSTANTS ============================= */
+const TASK_TYPES = ['Assignment', 'Lab Report', 'Viva', 'Exam'];
+const PRIORITIES = ['Low', 'Medium', 'High'];
+const STATUSES = [
+  { key: 'todo', label: 'To Do' },
+  { key: 'in-progress', label: 'In Progress' },
+  { key: 'done', label: 'Submitted / Completed' },
+];
+const PRIORITY_STYLE = {
+  High: { text: 'text-red-400', bg: 'bg-red-500/10', border: 'border-red-500/30', dot: 'bg-red-400' },
+  Medium: { text: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/30', dot: 'bg-amber-400' },
+  Low: { text: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/30', dot: 'bg-emerald-400' },
+};
+const COURSE_PALETTE = [
+  { text: 'text-cyan-300', bg: 'bg-cyan-500/10', border: 'border-cyan-500/25', dot: 'bg-cyan-400' },
+  { text: 'text-blue-300', bg: 'bg-blue-500/10', border: 'border-blue-500/25', dot: 'bg-blue-400' },
+  { text: 'text-violet-300', bg: 'bg-violet-500/10', border: 'border-violet-500/25', dot: 'bg-violet-400' },
+  { text: 'text-pink-300', bg: 'bg-pink-500/10', border: 'border-pink-500/25', dot: 'bg-pink-400' },
+  { text: 'text-teal-300', bg: 'bg-teal-500/10', border: 'border-teal-500/25', dot: 'bg-teal-400' },
+  { text: 'text-orange-300', bg: 'bg-orange-500/10', border: 'border-orange-500/25', dot: 'bg-orange-400' },
+  { text: 'text-indigo-300', bg: 'bg-indigo-500/10', border: 'border-indigo-500/25', dot: 'bg-indigo-400' },
+  { text: 'text-lime-300', bg: 'bg-lime-500/10', border: 'border-lime-500/25', dot: 'bg-lime-400' },
+];
+const DEFAULT_COURSES = ['C++ Programming', 'Database Systems', 'Computer Networks', 'Discrete Math', 'Calculus'];
+const DEFAULT_LINKS = [
+  { id: uid(), label: 'LMS Submission Portal', url: 'https://lms.university.edu' },
+  { id: uid(), label: 'Lab Instructor Email', url: 'mailto:instructor@university.edu' },
+];
+const CHECKLIST_TEMPLATES = {
+  'Assignment': ['Code comments added', 'Report / PDF generated', 'Files compressed into .zip'],
+  'Lab Report': ['Code comments added', 'Output screenshots included', 'PDF report generated', 'ZIP file compressed'],
+  'Viva': ['Concepts revised', 'Viva code / output ready', 'Likely questions listed'],
+  'Exam': ['Syllabus reviewed', 'Practice problems solved', 'Formula sheet prepared'],
+};
+
+const STORAGE_KEY = 'cs-academic-tracker:data';
+
+/* ============================= STATE ============================= */
+let state = {
+  tasks: [],
+  courses: [],
+  links: [],
+  view: 'dashboard',
+  ui: {
+    sidebarOpen: false,
+    search: '',
+    filterCourse: 'all',
+    filterStatus: 'all',
+    filterType: 'all',
+    filterPriority: 'all',
+    modal: null,        // { mode: 'add'|'edit', taskId }
+    detailTaskId: null,
+    confirmDeleteId: null,
+    toast: null,
+  },
+};
+
+function uid() { return 'id-' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36); }
+
+function defaultState() {
+  return {
+    tasks: [],
+    courses: DEFAULT_COURSES.map((name, i) => ({ id: uid(), name, colorIdx: i % COURSE_PALETTE.length })),
+    links: DEFAULT_LINKS,
+    view: 'dashboard',
+    ui: { sidebarOpen: false, search: '', filterCourse: 'all', filterStatus: 'all', filterType: 'all', filterPriority: 'all', modal: null, detailTaskId: null, confirmDeleteId: null, toast: null },
+  };
+}
+
+/* ============================= PERSISTENCE (browser localStorage) ============================= */
+async function loadState() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      state = Object.assign(defaultState(), parsed);
+      state.ui = defaultState().ui; // never persist transient ui
+    } else {
+      state = defaultState();
+    }
+  } catch (e) {
+    state = defaultState();
+  }
+}
+
+let saveTimer = null;
+function persist() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    try {
+      const { ui, ...toSave } = state;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
+    } catch (e) {
+      showToast('Could not save — your changes may not persist.', 'error');
+    }
+  }, 120);
+}
+
+/* ============================= UTIL ============================= */
+function esc(str) {
+  if (str === null || str === undefined) return '';
+  return String(str).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function fmtDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (isNaN(d)) return '—';
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + ' · ' + d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+}
+function fmtDateShort(iso) {
+  const d = new Date(iso);
+  if (isNaN(d)) return '—';
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
+function daysUntil(iso) {
+  const now = new Date();
+  const d = new Date(iso);
+  return (d - now) / (1000 * 60 * 60 * 24);
+}
+function courseStyle(courseName) {
+  const c = state.courses.find((c) => c.name === courseName);
+  const idx = c ? c.colorIdx : Math.abs(hashCode(courseName || '')) % COURSE_PALETTE.length;
+  return COURSE_PALETTE[idx % COURSE_PALETTE.length];
+}
+function hashCode(s) { let h = 0; for (let i = 0; i < s.length; i++) { h = (h << 5) - h + s.charCodeAt(i); h |= 0; } return h; }
+function typeIcon(type) {
+  return { Assignment: 'list', 'Lab Report': 'flask', Viva: 'book', Exam: 'clock' }[type] || 'list';
+}
+function activeTasks() { return state.tasks.filter((t) => t.status !== 'done'); }
+function showToast(msg, kind = 'ok') {
+  state.ui.toast = { msg, kind, id: uid() };
+  render();
+  clearTimeout(showToast._t);
+  showToast._t = setTimeout(() => { state.ui.toast = null; render(); }, 2600);
+}
+
+/* ============================= MUTATIONS ============================= */
+function upsertTask(data, id) {
+  if (id) {
+    const idx = state.tasks.findIndex((t) => t.id === id);
+    if (idx > -1) state.tasks[idx] = { ...state.tasks[idx], ...data };
+  } else {
+    const checklist = (CHECKLIST_TEMPLATES[data.type] || []).map((label) => ({ id: uid(), label, done: false }));
+    state.tasks.unshift({
+      id: uid(), status: 'todo', createdAt: new Date().toISOString(), checklist, ...data,
+    });
+  }
+  persist();
+}
+function deleteTask(id) {
+  state.tasks = state.tasks.filter((t) => t.id !== id);
+  state.ui.confirmDeleteId = null;
+  if (state.ui.detailTaskId === id) state.ui.detailTaskId = null;
+  persist();
+  showToast('Task deleted.');
+}
+function setStatus(id, status) {
+  const t = state.tasks.find((t) => t.id === id);
+  if (t) { t.status = status; persist(); }
+}
+function toggleChecklistItem(taskId, itemId) {
+  const t = state.tasks.find((t) => t.id === taskId);
+  if (!t) return;
+  const item = t.checklist.find((c) => c.id === itemId);
+  if (item) { item.done = !item.done; persist(); }
+}
+function addChecklistItem(taskId, label) {
+  const t = state.tasks.find((t) => t.id === taskId);
+  if (!t || !label.trim()) return;
+  t.checklist.push({ id: uid(), label: label.trim(), done: false });
+  persist();
+}
+function removeChecklistItem(taskId, itemId) {
+  const t = state.tasks.find((t) => t.id === taskId);
+  if (!t) return;
+  t.checklist = t.checklist.filter((c) => c.id !== itemId);
+  persist();
+}
+function addCourse(name) {
+  if (!name.trim()) return;
+  if (state.courses.some((c) => c.name.toLowerCase() === name.trim().toLowerCase())) { showToast('That course already exists.', 'error'); return; }
+  state.courses.push({ id: uid(), name: name.trim(), colorIdx: state.courses.length % COURSE_PALETTE.length });
+  persist();
+}
+function removeCourse(id) {
+  const c = state.courses.find((c) => c.id === id);
+  state.courses = state.courses.filter((c) => c.id !== id);
+  persist();
+  showToast(c ? `Removed "${c.name}".` : 'Course removed.');
+}
+function addLink(label, url) {
+  if (!label.trim() || !url.trim()) return;
+  state.links.push({ id: uid(), label: label.trim(), url: url.trim() });
+  persist();
+}
+function removeLink(id) { state.links = state.links.filter((l) => l.id !== id); persist(); }
+function clearAllData() {
+  state = defaultState();
+  persist();
+  showToast('All data cleared.');
+}
+function loadSampleData() {
+  const c = (name) => state.courses.find((x) => x.name === name)?.name || state.courses[0]?.name;
+  const now = Date.now();
+  const day = 86400000;
+  const mk = (title, course, type, priority, dueInDays, notes, status = 'todo') => ({
+    id: uid(), title, course, type, priority, status, notes,
+    dueDate: new Date(now + dueInDays * day).toISOString().slice(0, 16),
+    createdAt: new Date().toISOString(),
+    checklist: (CHECKLIST_TEMPLATES[type] || []).map((label) => ({ id: uid(), label, done: Math.random() > 0.6 })),
+  });
+  state.tasks = [
+    mk('C++ Inheritance Lab Assignment', c('C++ Programming'), 'Lab Report', 'High', 1, 'Submit as .zip with source + output screenshots. Include comments explaining virtual functions.'),
+    mk('ER Diagram — Library Management System', c('Database Systems'), 'Assignment', 'Medium', 3, 'Draw ERD in draw.io, export as PDF, include cardinality notes.'),
+    mk('Viva — Data Structures (Linked Lists)', c('C++ Programming'), 'Viva', 'High', 2, 'Prepare traversal, insertion, deletion code. Expect questions on time complexity.'),
+    mk('Subnetting Practice Sheet', c('Computer Networks'), 'Lab Report', 'Low', 6, 'Show full working for each subnet calculation.'),
+    mk('Discrete Math Problem Set 4', c('Discrete Math'), 'Assignment', 'Medium', 5, 'Chapters 6–7: relations and functions.'),
+    mk('Calculus Midterm', c('Calculus'), 'Exam', 'High', 9, 'Covers integration techniques and series convergence.'),
+    mk('Normalization Lab (3NF)', c('Database Systems'), 'Lab Report', 'Medium', -1, 'Submitted via portal.', 'done'),
+    mk('Socket Programming Lab', c('Computer Networks'), 'Lab Report', 'High', 0, 'TCP client-server chat app in C++. Demo required.', 'in-progress'),
+  ];
+  persist();
+  showToast('Sample data loaded.');
+}
+
+/* ============================= DERIVED DATA ============================= */
+function filteredTasks(scope) {
+  let list = [...state.tasks];
+  if (scope === 'labs') list = list.filter((t) => t.type === 'Lab Report' || t.type === 'Viva');
+  if (scope === 'assignments') list = list.filter((t) => t.type === 'Assignment' || t.type === 'Exam');
+  const { search, filterCourse, filterStatus, filterType, filterPriority } = state.ui;
+  if (search.trim()) {
+    const q = search.toLowerCase();
+    list = list.filter((t) => t.title.toLowerCase().includes(q) || (t.course || '').toLowerCase().includes(q) || (t.notes || '').toLowerCase().includes(q));
+  }
+  if (filterCourse !== 'all') list = list.filter((t) => t.course === filterCourse);
+  if (filterStatus !== 'all') list = list.filter((t) => t.status === filterStatus);
+  if (filterType !== 'all') list = list.filter((t) => t.type === filterType);
+  if (filterPriority !== 'all') list = list.filter((t) => t.priority === filterPriority);
+  return list;
+}
+function stats() {
+  const active = activeTasks();
+  const pendingLabs = state.tasks.filter((t) => t.type === 'Lab Report' && t.status !== 'done').length;
+  const upcomingVivas = state.tasks.filter((t) => t.type === 'Viva' && t.status !== 'done' && daysUntil(t.dueDate) <= 7 && daysUntil(t.dueDate) >= -0.01).length;
+  const completed = state.tasks.filter((t) => t.status === 'done').length;
+  return { totalActive: active.length, pendingLabs, upcomingVivas, completed };
+}
+
+/* ============================= RENDER: SHELL ============================= */
+const NAV = [
+  { key: 'dashboard', label: 'Dashboard', icon: 'grid' },
+  { key: 'assignments', label: 'Assignments', icon: 'list' },
+  { key: 'labs', label: 'Labs & Vivas', icon: 'flask' },
+  { key: 'analytics', label: 'Analytics', icon: 'bar' },
+  { key: 'settings', label: 'Settings', icon: 'gear' },
+];
+
+function render() {
+  const app = document.getElementById('app');
+  app.innerHTML = `
+    <div class="flex min-h-screen">
+      ${renderSidebar()}
+      <div class="flex-1 min-w-0 flex flex-col">
+        ${renderTopbar()}
+        <main class="flex-1 px-4 md:px-8 py-6 max-w-[1400px] w-full mx-auto">
+          ${renderView()}
+        </main>
+        <footer class="text-center text-[11px] text-slate-600 font-mono pb-6 pt-2">
+          CS Academic Tracker · data saved automatically
+        </footer>
+      </div>
+    </div>
+    ${state.ui.sidebarOpen ? `<div data-action="close-sidebar" class="fixed inset-0 bg-black/60 z-40 md:hidden"></div>` : ''}
+    ${renderModal()}
+    ${renderDetailPanel()}
+    ${renderToast()}
+  `;
+}
+
+function renderSidebar() {
+  const open = state.ui.sidebarOpen;
+  return `
+  <aside class="${open ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 fixed md:static z-50 inset-y-0 left-0 w-64 shrink-0 bg-ink-925 border-r border-ink-700 transition-transform duration-200 flex flex-col">
+    <div class="h-16 flex items-center gap-2.5 px-5 border-b border-ink-700">
+      <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center shadow-glowsm">
+        <span class="text-ink-950 font-bold text-sm font-mono">CS</span>
+      </div>
+      <div class="leading-tight">
+        <p class="text-sm font-semibold text-slate-100">Academic Tracker</p>
+        <p class="text-[10px] text-slate-500 font-mono tracking-wide">v1.0</p>
+      </div>
+      <button data-action="close-sidebar" class="ml-auto md:hidden text-slate-500 hover:text-slate-300">${icon('x')}</button>
+    </div>
+    <nav class="flex-1 p-3 space-y-1 overflow-y-auto">
+      ${NAV.map((n) => `
+        <button data-action="nav" data-view="${n.key}" class="w-full group flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors relative
+          ${state.view === n.key ? 'bg-cyan-500/10 text-cyan-300' : 'text-slate-400 hover:text-slate-200 hover:bg-ink-800'}">
+          ${state.view === n.key ? '<span class="absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-full bg-cyan-400"></span>' : ''}
+          ${icon(n.icon, 'w-[18px] h-[18px]')}
+          <span class="font-medium">${n.label}</span>
+        </button>
+      `).join('')}
+    </nav>
+    <div class="p-3 border-t border-ink-700">
+      <button data-action="open-add" class="w-full flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 text-ink-950 font-semibold text-sm py-2.5 shadow-glowsm hover:brightness-110 transition">
+        ${icon('plus', 'w-4 h-4')} Add New Task
+      </button>
+    </div>
+  </aside>`;
+}
+
+function renderTopbar() {
+  const titles = { dashboard: 'Dashboard', assignments: 'Assignments', labs: 'Labs & Vivas', analytics: 'Analytics', settings: 'Settings' };
+  return `
+  <header class="h-16 border-b border-ink-700 bg-ink-950/80 backdrop-blur sticky top-0 z-30 flex items-center gap-3 px-4 md:px-8">
+    <button data-action="open-sidebar" class="md:hidden text-slate-400 hover:text-slate-200">${icon('menu', 'w-5 h-5')}</button>
+    <h1 class="text-lg font-semibold text-slate-100 mr-auto">${titles[state.view] || ''}</h1>
+    <div class="hidden sm:flex items-center gap-2 text-xs text-slate-500 font-mono">
+      ${new Date().toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
+    </div>
+    <button data-action="open-add" class="hidden md:flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-lg border border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/10 transition">
+      ${icon('plus', 'w-3.5 h-3.5')} New Task
+    </button>
+  </header>`;
+}
+
+function renderToast() {
+  if (!state.ui.toast) return '';
+  const { msg, kind } = state.ui.toast;
+  const color = kind === 'error' ? 'border-red-500/40 text-red-300' : 'border-emerald-500/40 text-emerald-300';
+  return `<div class="fixed bottom-5 left-1/2 -translate-x-1/2 z-[200]">
+    <div class="flex items-center gap-2 bg-ink-850 border ${color} rounded-lg px-4 py-2.5 text-sm shadow-xl">
+      ${icon(kind === 'error' ? 'alert' : 'check', 'w-4 h-4')} ${esc(msg)}
+    </div>
+  </div>`;
+}
+
+function renderView() {
+  switch (state.view) {
+    case 'dashboard': return renderDashboard();
+    case 'assignments': return renderTaskListView('assignments');
+    case 'labs': return renderTaskListView('labs');
+    case 'analytics': return renderAnalytics();
+    case 'settings': return renderSettings();
+    default: return '';
+  }
+}
+
+/* ============================= DASHBOARD ============================= */
+function renderDashboard() {
+  const s = stats();
+  const upcoming = state.tasks
+    .filter((t) => t.status !== 'done')
+    .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate))
+    .slice(0, 8);
+
+  const statCards = [
+    { label: 'Total Active Tasks', value: s.totalActive, icon: 'layers', accent: 'from-cyan-400 to-blue-500' },
+    { label: 'Pending Lab Reports', value: s.pendingLabs, icon: 'flask', accent: 'from-blue-400 to-indigo-500' },
+    { label: 'Upcoming Vivas (7d)', value: s.upcomingVivas, icon: 'book', accent: 'from-violet-400 to-fuchsia-500' },
+    { label: 'Completed', value: s.completed, icon: 'check', accent: 'from-emerald-400 to-teal-500' },
+  ];
+
+  if (state.tasks.length === 0) {
+    return `
+    <div>
+      ${renderEmptyHero()}
+    </div>`;
+  }
+
+  return `
+  <div class="space-y-6">
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      ${statCards.map((c) => `
+        <div class="rounded-xl border border-ink-700 bg-ink-900 p-4 card-hover">
+          <div class="flex items-center justify-between mb-3">
+            <div class="w-9 h-9 rounded-lg bg-gradient-to-br ${c.accent} bg-opacity-10 flex items-center justify-center">
+              <span class="w-4 h-4 text-ink-950">${ICON[c.icon]}</span>
+            </div>
+          </div>
+          <p class="text-2xl font-bold font-mono text-slate-100">${c.value}</p>
+          <p class="text-xs text-slate-500 mt-0.5">${c.label}</p>
+        </div>
+      `).join('')}
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div class="lg:col-span-2 rounded-xl border border-ink-700 bg-ink-900 overflow-hidden">
+        <div class="px-5 py-4 border-b border-ink-700 flex items-center justify-between">
+          <h2 class="font-semibold text-slate-100 text-sm">Upcoming Deadlines</h2>
+          <span class="text-[11px] text-slate-500 font-mono">${upcoming.length} shown</span>
+        </div>
+        <div class="p-3">
+          ${upcoming.length ? renderTimeline(upcoming) : renderEmptyState('All caught up', 'Nothing due — add a task to start tracking it here.')}
+        </div>
+      </div>
+
+      <div class="space-y-6">
+        <div class="rounded-xl border border-ink-700 bg-ink-900 p-5">
+          <h2 class="font-semibold text-slate-100 text-sm mb-4">Courses</h2>
+          <div class="flex flex-wrap gap-2">
+            ${state.courses.map((c) => {
+              const st = COURSE_PALETTE[c.colorIdx % COURSE_PALETTE.length];
+              const count = state.tasks.filter((t) => t.course === c.name && t.status !== 'done').length;
+              return `<span class="inline-flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-full border ${st.border} ${st.bg} ${st.text}">
+                <span class="w-1.5 h-1.5 rounded-full ${st.dot}"></span>${esc(c.name)}
+                <span class="font-mono text-[10px] opacity-70">${count}</span>
+              </span>`;
+            }).join('') || '<p class="text-xs text-slate-500">No courses yet — add one in Settings.</p>'}
+          </div>
+        </div>
+
+        <div class="rounded-xl border border-ink-700 bg-ink-900 p-5">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="font-semibold text-slate-100 text-sm">Quick Links</h2>
+            <button data-action="nav" data-view="settings" class="text-[11px] text-cyan-400 hover:text-cyan-300">Manage</button>
+          </div>
+          <div class="space-y-2">
+            ${state.links.slice(0, 4).map((l) => `
+              <a href="${esc(l.url)}" target="_blank" rel="noopener" class="flex items-center gap-2 text-xs px-3 py-2 rounded-lg bg-ink-850 border border-ink-700 hover:border-cyan-500/30 text-slate-300 hover:text-cyan-300 transition truncate">
+                ${icon('link', 'w-3.5 h-3.5 text-slate-500')} <span class="truncate">${esc(l.label)}</span>
+              </a>
+            `).join('') || '<p class="text-xs text-slate-500">No links saved yet.</p>'}
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderEmptyHero() {
+  return `
+  <div class="rounded-2xl border border-ink-700 bg-gradient-to-b from-ink-900 to-ink-925 p-10 text-center">
+    <div class="w-14 h-14 mx-auto rounded-2xl bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center shadow-glow mb-5">
+      <span class="w-7 h-7 text-ink-950">${ICON.layers}</span>
+    </div>
+    <h2 class="text-xl font-bold text-slate-100 mb-2">Your tracker is empty</h2>
+    <p class="text-sm text-slate-500 max-w-sm mx-auto mb-6">Add your first assignment, lab report, or viva to see it show up on your dashboard timeline.</p>
+    <div class="flex items-center justify-center gap-3">
+      <button data-action="open-add" class="flex items-center gap-2 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 text-ink-950 font-semibold text-sm px-5 py-2.5 shadow-glowsm hover:brightness-110 transition">
+        ${icon('plus', 'w-4 h-4')} Add a Task
+      </button>
+      <button data-action="load-sample" class="text-sm px-5 py-2.5 rounded-lg border border-ink-600 text-slate-300 hover:border-cyan-500/40 hover:text-cyan-300 transition">
+        Load Sample Data
+      </button>
+    </div>
+  </div>`;
+}
+
+function renderEmptyState(title, sub) {
+  return `<div class="text-center py-10">
+    <p class="text-sm font-medium text-slate-300">${esc(title)}</p>
+    <p class="text-xs text-slate-500 mt-1">${esc(sub)}</p>
+  </div>`;
+}
+
+function renderTimeline(tasks) {
+  return `<div class="space-y-1">
+    ${tasks.map((t) => {
+      const p = PRIORITY_STYLE[t.priority];
+      const cs = courseStyle(t.course);
+      const d = daysUntil(t.dueDate);
+      const overdue = d < 0;
+      const soon = d >= 0 && d <= 1;
+      return `
+      <button data-action="open-detail" data-id="${t.id}" class="w-full flex items-center gap-3 px-2.5 py-2.5 rounded-lg hover:bg-ink-850 transition text-left group">
+        <div class="flex flex-col items-center w-12 shrink-0">
+          <span class="text-[11px] font-mono font-semibold ${overdue ? 'text-red-400' : soon ? 'text-amber-400' : 'text-slate-400'}">${fmtDateShort(t.dueDate)}</span>
+          <span class="w-1.5 h-1.5 rounded-full ${p.dot} mt-1"></span>
+        </div>
+        <div class="w-px self-stretch bg-ink-700"></div>
+        <div class="min-w-0 flex-1">
+          <p class="text-sm text-slate-200 font-medium truncate group-hover:text-cyan-300 transition">${esc(t.title)}</p>
+          <div class="flex items-center flex-wrap gap-1.5 mt-1">
+            <span class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full border ${cs.border} ${cs.bg} ${cs.text}">${esc(t.course || 'No course')}</span>
+            <span class="text-[10px] px-1.5 py-0.5 rounded-full border border-ink-600 text-slate-400">${esc(t.type)}</span>
+            ${overdue ? `<span class="text-[10px] px-1.5 py-0.5 rounded-full bg-red-500/15 text-red-400">Overdue</span>` : soon ? `<span class="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400">Due soon</span>` : ''}
+          </div>
+        </div>
+        <span class="text-[10px] font-mono px-2 py-1 rounded-full border ${p.border} ${p.bg} ${p.text} shrink-0">${t.priority}</span>
+      </button>`;
+    }).join('')}
+  </div>`;
+}
+
+/* ============================= TASK LIST / BOARD VIEW ============================= */
+function renderTaskListView(scope) {
+  const list = filteredTasks(scope);
+  const courseOptions = state.courses.map((c) => c.name);
+  const typeOptions = scope === 'labs' ? ['Lab Report', 'Viva'] : scope === 'assignments' ? ['Assignment', 'Exam'] : TASK_TYPES;
+
+  const filterBar = `
+  <div class="flex flex-col md:flex-row gap-3 mb-5">
+    <div class="relative flex-1">
+      ${icon('search', 'w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2')}
+      <input data-bind="search" type="search" value="${esc(state.ui.search)}" placeholder="Search by title, course, or notes…"
+        class="w-full bg-ink-900 border border-ink-700 rounded-lg pl-9 pr-3 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/30" />
+    </div>
+    <div class="flex flex-wrap gap-2">
+      ${selectField('filterCourse', ['all', ...courseOptions], state.ui.filterCourse, 'All Courses')}
+      ${selectField('filterType', ['all', ...typeOptions], state.ui.filterType, scope === 'labs' ? 'Lab Reports & Vivas' : scope === 'assignments' ? 'Assignments & Exams' : 'All Types')}
+      ${selectField('filterPriority', ['all', ...PRIORITIES], state.ui.filterPriority, 'All Priorities')}
+    </div>
+  </div>`;
+
+  const board = `
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+    ${STATUSES.map((col) => {
+      const items = list.filter((t) => t.status === col.key);
+      return `
+      <div class="rounded-xl border border-ink-700 bg-ink-925/60 flex flex-col min-h-[200px]" data-dropzone="${col.key}">
+        <div class="px-4 py-3 border-b border-ink-700 flex items-center justify-between sticky top-16 bg-ink-925/95 backdrop-blur rounded-t-xl">
+          <div class="flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full ${col.key === 'todo' ? 'bg-slate-400' : col.key === 'in-progress' ? 'bg-blue-400' : 'bg-emerald-400'}"></span>
+            <h3 class="text-sm font-semibold text-slate-200">${col.label}</h3>
+          </div>
+          <span class="text-[11px] font-mono text-slate-500">${items.length}</span>
+        </div>
+        <div class="p-3 space-y-3 flex-1">
+          ${items.length ? items.map((t) => renderTaskCard(t)).join('') : `<p class="text-xs text-slate-600 text-center py-6">No tasks here</p>`}
+        </div>
+      </div>`;
+    }).join('')}
+  </div>`;
+
+  return `<div>${filterBar}${state.tasks.length ? board : renderEmptyHero()}</div>`;
+}
+
+function selectField(name, options, current, allLabel) {
+  return `<select data-bind="${name}" class="bg-ink-900 border border-ink-700 rounded-lg px-3 py-2.5 text-xs text-slate-300 focus:outline-none focus:border-cyan-500/50">
+    ${options.map((o) => `<option value="${esc(o)}" ${o === current ? 'selected' : ''}>${o === 'all' ? allLabel : esc(o)}</option>`).join('')}
+  </select>`;
+}
+
+function renderTaskCard(t) {
+  const p = PRIORITY_STYLE[t.priority];
+  const cs = courseStyle(t.course);
+  const d = daysUntil(t.dueDate);
+  const overdue = d < 0 && t.status !== 'done';
+  const done = t.checklist.filter((c) => c.done).length;
+  const total = t.checklist.length;
+  return `
+  <div draggable="true" data-drag-id="${t.id}" data-action="open-detail" data-id="${t.id}"
+    class="group rounded-lg border ${overdue ? 'border-red-500/30' : 'border-ink-700'} bg-ink-900 p-3.5 cursor-pointer card-hover">
+    <div class="flex items-start justify-between gap-2 mb-2">
+      <span class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full border ${cs.border} ${cs.bg} ${cs.text} truncate max-w-[65%]">${esc(t.course || 'No course')}</span>
+      <span class="text-[10px] font-mono px-1.5 py-0.5 rounded-full border ${p.border} ${p.bg} ${p.text} shrink-0">${t.priority}</span>
+    </div>
+    <p class="text-sm font-medium text-slate-200 leading-snug mb-2 group-hover:text-cyan-300 transition">${esc(t.title)}</p>
+    <div class="flex items-center gap-1.5 text-[11px] text-slate-500 mb-2">
+      ${icon(typeIcon(t.type), 'w-3.5 h-3.5')} ${esc(t.type)}
+    </div>
+    <div class="flex items-center justify-between text-[11px]">
+      <span class="flex items-center gap-1 font-mono ${overdue ? 'text-red-400' : 'text-slate-500'}">${icon('clock', 'w-3 h-3')} ${fmtDate(t.dueDate)}</span>
+      ${total ? `<span class="font-mono text-slate-600">${done}/${total}</span>` : ''}
+    </div>
+    ${t.status !== 'done' ? `
+    <div class="mt-3 pt-3 border-t border-ink-800 flex gap-1.5">
+      ${col_button_row(t)}
+    </div>` : ''}
+  </div>`;
+}
+
+function col_button_row(t) {
+  const order = ['todo', 'in-progress', 'done'];
+  const idx = order.indexOf(t.status);
+  let btns = '';
+  if (idx > 0) btns += `<button data-action="set-status" data-id="${t.id}" data-status="${order[idx - 1]}" class="flex-1 text-[11px] py-1.5 rounded-md border border-ink-700 text-slate-400 hover:text-slate-200 hover:border-ink-600 transition">${icon('chevron', 'w-3 h-3 rotate-180 inline')} Back</button>`;
+  if (idx < order.length - 1) btns += `<button data-action="set-status" data-id="${t.id}" data-status="${order[idx + 1]}" class="flex-1 text-[11px] py-1.5 rounded-md border border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/10 transition">${order[idx+1]==='done'?'Complete':'Start'} ${icon('chevron', 'w-3 h-3 inline')}</button>`;
+  return btns;
+}
+
+/* ============================= ANALYTICS ============================= */
+function renderAnalytics() {
+  if (state.tasks.length === 0) {
+    return `<div>${renderEmptyHero()}</div>`;
+  }
+  const total = state.tasks.length;
+  const done = state.tasks.filter((t) => t.status === 'done').length;
+  const rate = total ? Math.round((done / total) * 100) : 0;
+
+  const perCourse = state.courses.map((c) => ({
+    name: c.name, colorIdx: c.colorIdx,
+    count: state.tasks.filter((t) => t.course === c.name).length,
+  })).filter((c) => c.count > 0).sort((a, b) => b.count - a.count);
+  const maxCourse = Math.max(1, ...perCourse.map((c) => c.count));
+
+  const perPriority = PRIORITIES.map((p) => ({ p, count: state.tasks.filter((t) => t.priority === p && t.status !== 'done').length }));
+  const maxPriority = Math.max(1, ...perPriority.map((p) => p.count));
+
+  const days = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate() + i);
+    const count = state.tasks.filter((t) => {
+      const td = new Date(t.dueDate);
+      return td.toDateString() === d.toDateString() && t.status !== 'done';
+    }).length;
+    return { label: d.toLocaleDateString(undefined, { weekday: 'short' }), count };
+  });
+  const maxDay = Math.max(1, ...days.map((d) => d.count));
+
+  const perType = TASK_TYPES.map((ty) => ({ ty, count: state.tasks.filter((t) => t.type === ty).length }));
+
+  return `
+  <div class="space-y-6">
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div class="rounded-xl border border-ink-700 bg-ink-900 p-5 md:col-span-1 flex flex-col items-center justify-center text-center">
+        <div class="relative w-28 h-28 mb-3">
+          <svg viewBox="0 0 36 36" class="w-28 h-28 -rotate-90">
+            <circle cx="18" cy="18" r="15.5" fill="none" stroke="#161f2d" stroke-width="3.5"/>
+            <circle cx="18" cy="18" r="15.5" fill="none" stroke="url(#g1)" stroke-width="3.5" stroke-linecap="round"
+              stroke-dasharray="${rate * 0.974}, 200" />
+            <defs><linearGradient id="g1" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#22d3ee"/><stop offset="100%" stop-color="#3b82f6"/></linearGradient></defs>
+          </svg>
+          <div class="absolute inset-0 flex items-center justify-center">
+            <span class="text-2xl font-bold font-mono text-slate-100">${rate}%</span>
+          </div>
+        </div>
+        <p class="text-sm font-semibold text-slate-200">Completion Rate</p>
+        <p class="text-xs text-slate-500 mt-1">${done} of ${total} tasks completed</p>
+      </div>
+
+      <div class="rounded-xl border border-ink-700 bg-ink-900 p-5 md:col-span-2">
+        <h3 class="text-sm font-semibold text-slate-200 mb-4">Next 7 Days — Active Load</h3>
+        <div class="flex items-end gap-3 h-32">
+          ${days.map((d) => `
+            <div class="flex-1 flex flex-col items-center justify-end gap-2 h-full">
+              <span class="text-[11px] font-mono text-slate-400">${d.count || ''}</span>
+              <div class="w-full rounded-md bg-gradient-to-t from-cyan-500 to-blue-500 ${d.count ? '' : 'opacity-10'}" style="height:${Math.max(6, (d.count / maxDay) * 100)}%"></div>
+              <span class="text-[10px] text-slate-500">${d.label}</span>
+            </div>`).join('')}
+        </div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div class="rounded-xl border border-ink-700 bg-ink-900 p-5">
+        <h3 class="text-sm font-semibold text-slate-200 mb-4">Tasks per Course</h3>
+        <div class="space-y-3">
+          ${perCourse.length ? perCourse.map((c) => {
+            const st = COURSE_PALETTE[c.colorIdx % COURSE_PALETTE.length];
+            return `
+            <div>
+              <div class="flex items-center justify-between text-xs mb-1">
+                <span class="text-slate-300">${esc(c.name)}</span>
+                <span class="font-mono text-slate-500">${c.count}</span>
+              </div>
+              <div class="h-2 rounded-full bar-track overflow-hidden">
+                <div class="h-full rounded-full ${st.dot}" style="width:${(c.count / maxCourse) * 100}%"></div>
+              </div>
+            </div>`;
+          }).join('') : '<p class="text-xs text-slate-500">No data yet.</p>'}
+        </div>
+      </div>
+
+      <div class="rounded-xl border border-ink-700 bg-ink-900 p-5">
+        <h3 class="text-sm font-semibold text-slate-200 mb-4">Active Tasks by Priority</h3>
+        <div class="space-y-3">
+          ${perPriority.map((p) => {
+            const st = PRIORITY_STYLE[p.p];
+            return `
+            <div>
+              <div class="flex items-center justify-between text-xs mb-1">
+                <span class="${st.text}">${p.p}</span>
+                <span class="font-mono text-slate-500">${p.count}</span>
+              </div>
+              <div class="h-2 rounded-full bar-track overflow-hidden">
+                <div class="h-full rounded-full ${st.dot}" style="width:${(p.count / maxPriority) * 100}%"></div>
+              </div>
+            </div>`;
+          }).join('')}
+        </div>
+        <div class="mt-5 pt-4 border-t border-ink-800 grid grid-cols-2 gap-2">
+          ${perType.map((t) => `
+            <div class="flex items-center justify-between text-xs px-2.5 py-2 rounded-lg bg-ink-850">
+              <span class="flex items-center gap-1.5 text-slate-400">${icon(typeIcon(t.ty), 'w-3.5 h-3.5')} ${t.ty}</span>
+              <span class="font-mono text-slate-300">${t.count}</span>
+            </div>`).join('')}
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ============================= SETTINGS ============================= */
+function renderSettings() {
+  return `
+  <div class="max-w-3xl space-y-6">
+    <div class="rounded-xl border border-ink-700 bg-ink-900 p-5">
+      <h2 class="text-sm font-semibold text-slate-200 mb-1">Courses</h2>
+      <p class="text-xs text-slate-500 mb-4">Manage the courses shown as badges throughout the app.</p>
+      <div class="flex flex-wrap gap-2 mb-4">
+        ${state.courses.map((c) => {
+          const st = COURSE_PALETTE[c.colorIdx % COURSE_PALETTE.length];
+          return `<span class="inline-flex items-center gap-1.5 text-xs pl-2.5 pr-1.5 py-1.5 rounded-full border ${st.border} ${st.bg} ${st.text}">
+            ${esc(c.name)}
+            <button data-action="remove-course" data-id="${c.id}" class="hover:text-red-400 transition">${icon('x', 'w-3 h-3')}</button>
+          </span>`;
+        }).join('') || '<p class="text-xs text-slate-500">No courses added.</p>'}
+      </div>
+      <form data-action="add-course-form" class="flex gap-2">
+        <input name="courseName" type="text" placeholder="e.g. Operating Systems" class="flex-1 bg-ink-850 border border-ink-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-cyan-500/50" />
+        <button type="submit" class="px-4 py-2 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 text-sm font-medium hover:bg-cyan-500/20 transition">Add</button>
+      </form>
+    </div>
+
+    <div class="rounded-xl border border-ink-700 bg-ink-900 p-5">
+      <h2 class="text-sm font-semibold text-slate-200 mb-1">Quick Links & Notes</h2>
+      <p class="text-xs text-slate-500 mb-4">Store submission portal links, professor emails, or any recurring reference.</p>
+      <div class="space-y-2 mb-4">
+        ${state.links.map((l) => `
+          <div class="flex items-center gap-2 bg-ink-850 border border-ink-700 rounded-lg px-3 py-2.5">
+            ${icon('link', 'w-3.5 h-3.5 text-slate-500 shrink-0')}
+            <div class="min-w-0 flex-1">
+              <p class="text-sm text-slate-200 truncate">${esc(l.label)}</p>
+              <a href="${esc(l.url)}" target="_blank" rel="noopener" class="text-[11px] text-cyan-400 hover:underline truncate block">${esc(l.url)}</a>
+            </div>
+            <button data-action="remove-link" data-id="${l.id}" class="text-slate-500 hover:text-red-400 transition shrink-0">${icon('trash', 'w-3.5 h-3.5')}</button>
+          </div>
+        `).join('') || '<p class="text-xs text-slate-500">No links saved.</p>'}
+      </div>
+      <form data-action="add-link-form" class="grid grid-cols-1 sm:grid-cols-[1fr_1.4fr_auto] gap-2">
+        <input name="linkLabel" type="text" placeholder="Label (e.g. LMS Portal)" class="bg-ink-850 border border-ink-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-cyan-500/50" />
+        <input name="linkUrl" type="text" placeholder="https:// or mailto:" class="bg-ink-850 border border-ink-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-cyan-500/50" />
+        <button type="submit" class="px-4 py-2 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 text-sm font-medium hover:bg-cyan-500/20 transition">Add</button>
+      </form>
+    </div>
+
+    <div class="rounded-xl border border-ink-700 bg-ink-900 p-5">
+      <h2 class="text-sm font-semibold text-slate-200 mb-1">Data</h2>
+      <p class="text-xs text-slate-500 mb-4">Your tasks are saved automatically as you make changes.</p>
+      <div class="flex flex-wrap gap-2">
+        <button data-action="export-data" class="flex items-center gap-1.5 text-xs px-3.5 py-2 rounded-lg border border-ink-600 text-slate-300 hover:border-cyan-500/40 hover:text-cyan-300 transition">${icon('download', 'w-3.5 h-3.5')} Export JSON</button>
+        <label class="flex items-center gap-1.5 text-xs px-3.5 py-2 rounded-lg border border-ink-600 text-slate-300 hover:border-cyan-500/40 hover:text-cyan-300 transition cursor-pointer">
+          ${icon('upload', 'w-3.5 h-3.5')} Import JSON
+          <input type="file" accept="application/json" data-action="import-data" class="hidden" />
+        </label>
+        <button data-action="load-sample" class="flex items-center gap-1.5 text-xs px-3.5 py-2 rounded-lg border border-ink-600 text-slate-300 hover:border-cyan-500/40 hover:text-cyan-300 transition">${icon('layers', 'w-3.5 h-3.5')} Load Sample Data</button>
+        <button data-action="clear-data" class="flex items-center gap-1.5 text-xs px-3.5 py-2 rounded-lg border border-red-500/30 text-red-400 hover:bg-red-500/10 transition ml-auto">${icon('trash', 'w-3.5 h-3.5')} Clear All Data</button>
+      </div>
+    </div>
+
+    <div class="rounded-xl border border-ink-700 bg-ink-900 p-5 flex items-start gap-3">
+      ${icon('info', 'w-4 h-4 text-slate-500 mt-0.5 shrink-0')}
+      <p class="text-xs text-slate-500 leading-relaxed">
+        Data is saved automatically to your browser's localStorage, so everything is still here after you refresh or close the tab. It's tied to this browser on this device — clearing site data will erase it, so use Export JSON if you want a backup.
+      </p>
+    </div>
+  </div>`;
+}
+
+/* ============================= MODAL: ADD / EDIT TASK ============================= */
+function renderModal() {
+  const m = state.ui.modal;
+  if (!m) return '';
+  const editing = m.mode === 'edit';
+  const t = editing ? state.tasks.find((t) => t.id === m.taskId) : null;
+  if (editing && !t) return '';
+  const courseOptions = state.courses.map((c) => c.name);
+
+  return `
+  <div class="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4">
+    <div data-action="close-modal" class="absolute inset-0 bg-black/70 backdrop-blur-sm"></div>
+    <div class="relative w-full sm:max-w-lg bg-ink-900 border border-ink-700 sm:rounded-2xl rounded-t-2xl max-h-[92vh] overflow-y-auto shadow-2xl">
+      <div class="flex items-center justify-between px-5 py-4 border-b border-ink-700 sticky top-0 bg-ink-900 z-10">
+        <h2 class="font-semibold text-slate-100">${editing ? 'Edit Task' : 'Add New Task'}</h2>
+        <button data-action="close-modal" class="text-slate-500 hover:text-slate-300">${icon('x', 'w-5 h-5')}</button>
+      </div>
+      <form data-action="task-form" class="p-5 space-y-4">
+        <div>
+          <label class="block text-xs text-slate-400 mb-1.5">Title</label>
+          <input required name="title" value="${esc(t?.title || '')}" type="text" placeholder="e.g. C++ Inheritance Lab Assignment"
+            class="w-full bg-ink-850 border border-ink-700 rounded-lg px-3 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/30" />
+        </div>
+
+        <div>
+          <label class="block text-xs text-slate-400 mb-1.5">Course</label>
+          <select name="course" class="w-full bg-ink-850 border border-ink-700 rounded-lg px-3 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-cyan-500/50">
+            ${courseOptions.length ? courseOptions.map((c) => `<option value="${esc(c)}" ${t?.course === c ? 'selected' : ''}>${esc(c)}</option>`).join('') : '<option value="">Add a course in Settings first</option>'}
+          </select>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs text-slate-400 mb-1.5">Task Type</label>
+            <select name="type" class="w-full bg-ink-850 border border-ink-700 rounded-lg px-3 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-cyan-500/50">
+              ${TASK_TYPES.map((ty) => `<option value="${ty}" ${t?.type === ty ? 'selected' : ''}>${ty}</option>`).join('')}
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs text-slate-400 mb-1.5">Priority</label>
+            <select name="priority" class="w-full bg-ink-850 border border-ink-700 rounded-lg px-3 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-cyan-500/50">
+              ${PRIORITIES.map((p) => `<option value="${p}" ${(t?.priority || 'Medium') === p ? 'selected' : ''}>${p}</option>`).join('')}
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs text-slate-400 mb-1.5">Due Date & Time</label>
+          <input required name="dueDate" value="${t?.dueDate ? t.dueDate.slice(0,16) : ''}" type="datetime-local"
+            class="w-full bg-ink-850 border border-ink-700 rounded-lg px-3 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-cyan-500/50" />
+        </div>
+
+        <div>
+          <label class="block text-xs text-slate-400 mb-1.5">Notes / Description</label>
+          <textarea name="notes" rows="3" placeholder="File requirements, viva prep notes, etc."
+            class="w-full bg-ink-850 border border-ink-700 rounded-lg px-3 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-cyan-500/50 resize-none">${esc(t?.notes || '')}</textarea>
+        </div>
+
+        <div class="flex items-center gap-3 pt-2">
+          <button type="submit" class="flex-1 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 text-ink-950 font-semibold text-sm py-2.5 shadow-glowsm hover:brightness-110 transition">
+            ${editing ? 'Save Changes' : 'Add Task'}
+          </button>
+          <button type="button" data-action="close-modal" class="px-5 py-2.5 rounded-lg border border-ink-600 text-sm text-slate-300 hover:border-ink-500 transition">Cancel</button>
+        </div>
+      </form>
+    </div>
+  </div>`;
+}
+
+/* ============================= TASK DETAIL PANEL ============================= */
+function renderDetailPanel() {
+  const id = state.ui.detailTaskId;
+  if (!id) return '';
+  const t = state.tasks.find((t) => t.id === id);
+  if (!t) return '';
+  const p = PRIORITY_STYLE[t.priority];
+  const cs = courseStyle(t.course);
+  const confirmingDelete = state.ui.confirmDeleteId === t.id;
+  const doneCount = t.checklist.filter((c) => c.done).length;
+
+  return `
+  <div class="fixed inset-0 z-[110] flex justify-end">
+    <div data-action="close-detail" class="absolute inset-0 bg-black/70 backdrop-blur-sm"></div>
+    <div class="relative w-full sm:max-w-md h-full bg-ink-900 border-l border-ink-700 overflow-y-auto">
+      <div class="flex items-center justify-between px-5 py-4 border-b border-ink-700 sticky top-0 bg-ink-900 z-10">
+        <div class="flex items-center gap-2 text-xs text-slate-500">
+          ${icon(typeIcon(t.type), 'w-4 h-4')} ${esc(t.type)}
+        </div>
+        <div class="flex items-center gap-1">
+          <button data-action="open-edit" data-id="${t.id}" class="p-2 text-slate-500 hover:text-cyan-300 transition">${icon('edit', 'w-4 h-4')}</button>
+          <button data-action="ask-delete" data-id="${t.id}" class="p-2 text-slate-500 hover:text-red-400 transition">${icon('trash', 'w-4 h-4')}</button>
+          <button data-action="close-detail" class="p-2 text-slate-500 hover:text-slate-300 transition">${icon('x', 'w-4 h-4')}</button>
+        </div>
+      </div>
+
+      <div class="p-5 space-y-5">
+        ${confirmingDelete ? `
+        <div class="rounded-lg border border-red-500/30 bg-red-500/10 p-3.5 flex items-center justify-between gap-3">
+          <p class="text-xs text-red-300">Delete this task permanently?</p>
+          <div class="flex gap-2 shrink-0">
+            <button data-action="delete-task" data-id="${t.id}" class="text-xs px-3 py-1.5 rounded-md bg-red-500 text-white font-medium hover:bg-red-400 transition">Delete</button>
+            <button data-action="cancel-delete" class="text-xs px-3 py-1.5 rounded-md border border-ink-600 text-slate-300">Cancel</button>
+          </div>
+        </div>` : ''}
+
+        <div>
+          <div class="flex items-center gap-2 mb-2">
+            <span class="inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-full border ${cs.border} ${cs.bg} ${cs.text}">${esc(t.course || 'No course')}</span>
+            <span class="text-[11px] font-mono px-2 py-1 rounded-full border ${p.border} ${p.bg} ${p.text}">${t.priority} priority</span>
+          </div>
+          <h2 class="text-lg font-bold text-slate-100 leading-snug">${esc(t.title)}</h2>
+        </div>
+
+        <div class="flex items-center gap-2 text-sm text-slate-400 bg-ink-850 rounded-lg px-3.5 py-2.5 border border-ink-700">
+          ${icon('clock', 'w-4 h-4')} Due ${fmtDate(t.dueDate)}
+        </div>
+
+        <div>
+          <p class="text-xs text-slate-500 mb-2 font-medium">Status</p>
+          <div class="grid grid-cols-3 gap-2">
+            ${STATUSES.map((s) => `
+              <button data-action="set-status" data-id="${t.id}" data-status="${s.key}"
+                class="text-[11px] py-2 rounded-lg border transition ${t.status === s.key ? 'bg-cyan-500/15 border-cyan-500/40 text-cyan-300' : 'border-ink-700 text-slate-500 hover:border-ink-600'}">
+                ${s.label}
+              </button>`).join('')}
+          </div>
+        </div>
+
+        ${t.notes ? `
+        <div>
+          <p class="text-xs text-slate-500 mb-1.5 font-medium flex items-center gap-1.5">${icon('note', 'w-3.5 h-3.5')} Notes</p>
+          <p class="text-sm text-slate-300 leading-relaxed bg-ink-850 rounded-lg p-3.5 border border-ink-700 whitespace-pre-wrap">${esc(t.notes)}</p>
+        </div>` : ''}
+
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <p class="text-xs text-slate-500 font-medium">Submission Checklist</p>
+            <span class="text-[11px] font-mono text-slate-500">${doneCount}/${t.checklist.length}</span>
+          </div>
+          <div class="space-y-1.5 mb-2">
+            ${t.checklist.map((c) => `
+              <div class="flex items-center gap-2.5 group bg-ink-850 border border-ink-700 rounded-lg px-3 py-2.5">
+                <input type="checkbox" class="chk" ${c.done ? 'checked' : ''} data-action="toggle-check" data-task="${t.id}" data-item="${c.id}" />
+                <span class="text-sm flex-1 ${c.done ? 'text-slate-500 line-through' : 'text-slate-300'}">${esc(c.label)}</span>
+                <button data-action="remove-check" data-task="${t.id}" data-item="${c.id}" class="opacity-0 group-hover:opacity-100 text-slate-600 hover:text-red-400 transition">${icon('x', 'w-3.5 h-3.5')}</button>
+              </div>`).join('')}
+          </div>
+          <form data-action="add-check-form" data-task="${t.id}" class="flex gap-2">
+            <input name="itemLabel" type="text" placeholder="Add checklist item…" class="flex-1 bg-ink-850 border border-ink-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-cyan-500/50" />
+            <button type="submit" class="px-3 py-2 rounded-lg border border-ink-600 text-slate-300 hover:border-cyan-500/40 hover:text-cyan-300 transition">${icon('plus', 'w-3.5 h-3.5')}</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ============================= EVENTS ============================= */
+// All listeners are bound ONCE (below, in bindGlobalEvents) using event delegation
+// on the #app container, which itself is never replaced — only its innerHTML changes
+// on each render(). This avoids re-attaching duplicate listeners on every render,
+// which was the cause of the app slowing down the longer it was used.
+function bindGlobalEvents() {
+  const app = document.getElementById('app');
+
+  app.addEventListener('click', (e) => {
+    const el = e.target.closest('[data-action]');
+    if (!el) return;
+    const action = el.dataset.action;
+
+    if (action === 'nav') {
+      state.view = el.dataset.view;
+      state.ui.sidebarOpen = false;
+      state.ui.search = ''; state.ui.filterCourse = 'all'; state.ui.filterStatus = 'all'; state.ui.filterType = 'all'; state.ui.filterPriority = 'all';
+      render();
+    }
+    else if (action === 'open-sidebar') { state.ui.sidebarOpen = true; render(); }
+    else if (action === 'close-sidebar') { state.ui.sidebarOpen = false; render(); }
+    else if (action === 'open-add') { state.ui.modal = { mode: 'add' }; render(); }
+    else if (action === 'open-edit') { state.ui.modal = { mode: 'edit', taskId: el.dataset.id }; state.ui.detailTaskId = null; render(); }
+    else if (action === 'close-modal') { state.ui.modal = null; render(); }
+    else if (action === 'open-detail') { state.ui.detailTaskId = el.dataset.id; state.ui.confirmDeleteId = null; render(); }
+    else if (action === 'close-detail') { state.ui.detailTaskId = null; state.ui.confirmDeleteId = null; render(); }
+    else if (action === 'ask-delete') { state.ui.confirmDeleteId = el.dataset.id; render(); }
+    else if (action === 'cancel-delete') { state.ui.confirmDeleteId = null; render(); }
+    else if (action === 'delete-task') { deleteTask(el.dataset.id); render(); }
+    else if (action === 'set-status') { setStatus(el.dataset.id, el.dataset.status); render(); }
+    else if (action === 'toggle-check') { toggleChecklistItem(el.dataset.task, el.dataset.item); render(); }
+    else if (action === 'remove-check') { removeChecklistItem(el.dataset.task, el.dataset.item); render(); }
+    else if (action === 'remove-course') { removeCourse(el.dataset.id); render(); }
+    else if (action === 'remove-link') { removeLink(el.dataset.id); render(); }
+    else if (action === 'load-sample') { loadSampleData(); render(); }
+    else if (action === 'clear-data') {
+      if (confirm('This will permanently delete all tasks, courses, and links. Continue?')) { clearAllData(); render(); }
+    }
+    else if (action === 'export-data') { exportData(); }
+  });
+
+  app.addEventListener('change', (e) => {
+    const bind = e.target.dataset?.bind;
+    if (bind) { state.ui[bind] = e.target.value; render(); }
+    if (e.target.dataset?.action === 'import-data') { importData(e.target.files[0]); }
+  });
+
+  app.addEventListener('input', (e) => {
+    if (e.target.dataset?.bind === 'search') {
+      state.ui.search = e.target.value;
+      renderInPlaceTaskList();
+    }
+  });
+
+  app.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const action = e.target.dataset?.action;
+    if (action === 'task-form') {
+      const fd = new FormData(e.target);
+      const data = {
+        title: fd.get('title').trim(),
+        course: fd.get('course'),
+        type: fd.get('type'),
+        priority: fd.get('priority'),
+        dueDate: fd.get('dueDate'),
+        notes: fd.get('notes').trim(),
+      };
+      if (!data.title) return;
+      const m = state.ui.modal;
+      upsertTask(data, m.mode === 'edit' ? m.taskId : null);
+      state.ui.modal = null;
+      showToast(m.mode === 'edit' ? 'Task updated.' : 'Task added.');
+      render();
+    } else if (action === 'add-course-form') {
+      const fd = new FormData(e.target);
+      addCourse(fd.get('courseName'));
+      e.target.reset();
+      render();
+    } else if (action === 'add-link-form') {
+      const fd = new FormData(e.target);
+      addLink(fd.get('linkLabel'), fd.get('linkUrl'));
+      e.target.reset();
+      render();
+    } else if (action === 'add-check-form') {
+      const fd = new FormData(e.target);
+      addChecklistItem(e.target.dataset.task, fd.get('itemLabel'));
+      render();
+    }
+  });
+
+  // Drag and drop — also delegated, so it works for cards created by any future render
+  // without needing to re-attach listeners each time.
+  let dragId = null;
+  app.addEventListener('dragstart', (e) => {
+    const card = e.target.closest('[data-drag-id]');
+    if (!card) return;
+    dragId = card.dataset.dragId;
+    card.classList.add('dragging');
+    e.dataTransfer.setData('text/plain', dragId);
+  });
+  app.addEventListener('dragend', (e) => {
+    const card = e.target.closest('[data-drag-id]');
+    if (card) card.classList.remove('dragging');
+    app.querySelectorAll('.drag-over').forEach((z) => z.classList.remove('drag-over'));
+  });
+  app.addEventListener('dragover', (e) => {
+    const zone = e.target.closest('[data-dropzone]');
+    if (!zone) return;
+    e.preventDefault();
+    zone.classList.add('drag-over');
+  });
+  app.addEventListener('dragleave', (e) => {
+    const zone = e.target.closest('[data-dropzone]');
+    if (zone && !zone.contains(e.relatedTarget)) zone.classList.remove('drag-over');
+  });
+  app.addEventListener('drop', (e) => {
+    const zone = e.target.closest('[data-dropzone]');
+    if (!zone) return;
+    e.preventDefault();
+    zone.classList.remove('drag-over');
+    const taskId = e.dataTransfer.getData('text/plain') || dragId;
+    if (taskId) { setStatus(taskId, zone.dataset.dropzone); render(); }
+  });
+}
+
+// Lightweight re-render of just the list/board portion while typing search, to preserve input focus
+function renderInPlaceTaskList() {
+  const main = document.querySelector('main');
+  if (!main) return render();
+  main.innerHTML = renderView();
+  const input = main.querySelector('[data-bind="search"]');
+  if (input) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); }
+}
+
+/* ============================= IMPORT / EXPORT ============================= */
+function exportData() {
+  const { ui, ...toSave } = state;
+  const blob = new Blob([JSON.stringify(toSave, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'cs-academic-tracker-export.json'; a.click();
+  URL.revokeObjectURL(url);
+}
+function importData(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const parsed = JSON.parse(reader.result);
+      if (!Array.isArray(parsed.tasks)) throw new Error('bad shape');
+      state = Object.assign(defaultState(), parsed);
+      state.ui = defaultState().ui;
+      persist();
+      showToast('Data imported successfully.');
+      render();
+    } catch (e) {
+      showToast('Could not import — invalid file.', 'error');
+    }
+  };
+  reader.readAsText(file);
+}
+
+/* ============================= BOOT ============================= */
+(async function boot() {
+  await loadState();
+  document.getElementById('boot').remove();
+  document.getElementById('app').classList.remove('hidden');
+  bindGlobalEvents();
+  render();
+})();
